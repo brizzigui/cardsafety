@@ -4,18 +4,16 @@ import os
 from utils import read_card, write_card
 
 FARE = 5
-
-# requsted at start
-MACHINE_NAME = "" 
+MACHINE_NAME = ""
 LEDGER_FILE = ""
 LEDGER_LAST = {}
+
 
 def load_ledger():
     """Load existing ledger entries into memory for fast lookups."""
     LEDGER_LAST.clear()
     if not LEDGER_FILE or not os.path.exists(LEDGER_FILE):
         return
-
     with open(LEDGER_FILE, "r") as f:
         for line in f:
             try:
@@ -30,6 +28,7 @@ def load_ledger():
             except Exception:
                 continue
 
+
 def log_state(uid, balance, counter):
     entry = {
         "machine": MACHINE_NAME,
@@ -37,58 +36,79 @@ def log_state(uid, balance, counter):
         "balance": balance,
         "counter": counter,
         "operation": -FARE,
-        "timestamp": time.time()
+        "timestamp": time.time(),
     }
-    # append to disk for persistence
     if not LEDGER_FILE:
         raise RuntimeError("LEDGER_FILE not set")
-
     with open(LEDGER_FILE, "a") as f:
         f.write(json.dumps(entry) + "\n")
-
-    # update in-memory ledger: keep the highest counter seen per uid
     prev = LEDGER_LAST.get(uid)
     if prev is None or counter > prev:
         LEDGER_LAST[uid] = counter
 
 
 def state_seen(uid, counter):
-    # Fast in-memory check: if we've seen this UID before and the
-    # presented counter is <= last seen counter, it's a replay.
     prev = LEDGER_LAST.get(uid)
     if prev is not None and counter <= prev:
         return True
-
-    # Fallback: if ledger on disk exists but memory might be stale,
-    # reload and re-check.
     if LEDGER_FILE and os.path.exists(LEDGER_FILE):
         load_ledger()
         prev = LEDGER_LAST.get(uid)
         if prev is not None and counter <= prev:
             return True
-
     return False
 
 
 def process():
-    uid, balance, counter = read_card()
-    print(f"{uid} → balance={balance}, counter={counter}")
+    """Read a card and apply fare deduction.
+
+    Returns a dict with two keys:
+      - "status": one of "ok", "replay", "insufficient", "error"
+      - "message": human-readable description of the outcome
+    """
+    try:
+        uid, balance, counter = read_card()
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
     if state_seen(uid, counter):
-        print("🚫 Replay detected")
-        return
+        return {
+            "status": "replay",
+            "message": f"{uid} — replay detected (counter={counter})",
+        }
 
     if balance < FARE:
-        print("🚫 Insufficient balance")
-        return
+        return {
+            "status": "insufficient",
+            "message": f"{uid} — insufficient balance ({balance} < {FARE})",
+        }
 
     new_balance = balance - FARE
     new_counter = counter + 1
 
-    write_card(new_balance, new_counter)
-    log_state(uid, balance, counter)
+    try:
+        write_card(new_balance, new_counter)
+        log_state(uid, balance, counter)
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
 
-    print("✅ OK")
+    return {
+        "status": "ok",
+        "message": f"{uid} — OK (balance {balance} -> {new_balance})",
+    }
+
+
+def run():
+    """CLI wrapper: calls process() and prints a human-readable result."""
+    result = process()
+    status_icons = {
+        "ok": "✅ OK",
+        "replay": "🚫 Replay detected",
+        "insufficient": "🚫 Insufficient balance",
+        "error": "❌ Error",
+    }
+    icon = status_icons.get(result["status"], "❓ Unknown")
+    print(f"{icon} — {result['message']}")
 
 
 if __name__ == "__main__":
@@ -98,7 +118,7 @@ if __name__ == "__main__":
     while True:
         try:
             print("Waiting for card...")
-            process()
+            run()
         except Exception as e:
             print("Error:", e)
         time.sleep(2)
