@@ -6,6 +6,7 @@ import io
 import contextlib
 import random
 import sys
+import threading
 
 try:
     import psutil
@@ -25,6 +26,7 @@ CONFIGS = [
 ]
 
 TRIALS = 100
+RETAP_TIMEOUT = 10  # seconds to allow user to remove and re-present the card
 
 
 def populate_ledger(ledger_file, entries):
@@ -131,18 +133,50 @@ def run_experiment(out_dir="./experiment_results"):
             statuses = {"ok": 0, "replay": 0, "insufficient": 0, "unknown": 0}
 
             print(f"Please perform {TRIALS} physical taps for {name}.\nPress Ctrl+C to abort early.")
+
+            def input_with_timeout(prompt, timeout):
+                print(prompt, end="", flush=True)
+                result = [None]
+
+                def target():
+                    try:
+                        # use readline to avoid leftover prompt issues
+                        result[0] = sys.stdin.readline()
+                    except Exception:
+                        result[0] = None
+
+                t = threading.Thread(target=target)
+                t.daemon = True
+                t.start()
+                t.join(timeout)
+                if t.is_alive():
+                    print("")
+                    return None
+                return result[0].rstrip("\n") if result[0] is not None else None
+
+            # Loop until we have TRIALS successful (non-error) attempts recorded
+            attempts_done = 0
             try:
-                for i in range(1, TRIALS + 1):
-                    print(f"Tap {i}/{TRIALS} — present card now")
+                while attempts_done < TRIALS:
+                    print(f"Tap {attempts_done+1}/{TRIALS} — present card now")
                     status, elapsed, mem, out = run_single_attempt()
-                    times.append(elapsed)
-                    mems.append(mem)
-                    short = status.split(":")[0]
-                    if short in statuses:
-                        statuses[short] += 1
+
+                    if isinstance(status, str) and status.startswith("error"):
+                        # do not count errors as taps
+                        print(f"  -> error (not counted): {status}")
                     else:
-                        statuses["unknown"] += 1
-                    print(f"  -> {short}, {elapsed:.1f} ms, mem={mem:.1f} MB")
+                        times.append(elapsed)
+                        mems.append(mem)
+                        short = status.split(":")[0]
+                        if short in statuses:
+                            statuses[short] += 1
+                        else:
+                            statuses["unknown"] += 1
+                        attempts_done += 1
+                        print(f"  -> {short}, {elapsed:.1f} ms, mem={mem:.1f} MB")
+
+                    # allow user to remove and re-present the card
+                    input_with_timeout(f"  Remove card and re-present, then press Enter (or wait {RETAP_TIMEOUT}s to continue): ", RETAP_TIMEOUT)
             except KeyboardInterrupt:
                 print("Experiment aborted by user — saving partial results.")
 
