@@ -1,0 +1,81 @@
+\floatname{algorithm}{Algoritmo}
+
+\begin{algorithm}[htbp]
+  \small
+  \algrenewcommand\algorithmicrequire{\textbf{Entrada:}}
+  \algrenewcommand\algorithmicensure{\textbf{Saída:}}
+  \algrenewcommand\algorithmicif{\textbf{se}}
+  \algrenewcommand\algorithmicthen{\textbf{então}}
+  \algrenewcommand\algorithmicelse{\textbf{senão}}
+  \algrenewcommand\algorithmicfor{\textbf{para}}
+  \algrenewcommand\algorithmicforall{\textbf{para cada}}
+  \algrenewcommand\algorithmicdo{\textbf{faça}}
+  \algrenewcommand\algorithmicwhile{\textbf{enquanto}}
+  \algrenewcommand\algorithmicprocedure{\textbf{procedimento}}
+  \algrenewcommand\algorithmicfunction{\textbf{função}}
+  \algrenewcommand\algorithmicreturn{\textbf{retorne}}
+  \algtext*{EndWhile}
+  \algtext*{EndFor}
+  \algtext*{EndIf}
+  \algtext*{EndProcedure}
+  \algtext*{EndFunction}
+
+  \caption{Prevenção local no validador durante a operação em campo.}
+  \label{alg:prevention}
+  \begin{algorithmic}[1]
+    \Require $M$ (identificador do validador), $L$ (histórico de transações), $T$ (tarifa), $K$ (chaves de acesso e criptografia).
+    \Ensure Decisão local de autorização ou bloqueio, atualização do cartão e registro da sessão.
+    \Statex \textbf{Símbolos:} $U$: UID do cartão;\; $S$: saldo;\; $C$: contador de estado;\; $D$: bloco protegido;\; $H$: cache local ($U \mapsto$ maior contador consumido);\; $t$: instante da transação.
+    \Statex
+
+    \Procedure{CicloValidador}{$M, L, T, K$}
+      \State $H \gets \emptyset$ \Comment{Inicializa cache em memória}
+      \ForAll{evento $(M', U, S, C, O, t) \in L$} \Comment{Carga única do histórico prévio}
+        \If{$U \notin H$ \textbf{ou} $C > H[U]$}
+          \State $H[U] \gets C$
+        \EndIf
+      \EndFor
+      \While{validador ativo na sessão operacional}
+        \State Aguardar aproximação de um cartão
+        \State $\mathit{decisao} \gets \Call{ValidarPassagem}{M, L, T, K, H}$
+        \State Exibir $\mathit{decisao}$
+      \EndWhile
+    \EndProcedure
+
+    \Function{ValidarPassagem}{$M, L, T, K, H$}
+      \State $(\mathit{ok}, U, S, C) \gets \Call{LerCartao}{K}$
+      \If{\textbf{não} $\mathit{ok}$}
+        \Return \textsc{Rejeitar} \Comment{Falha de leitura ou integridade}
+      \EndIf
+      \If{$U \in H$ \textbf{e} $C \le H[U]$}
+        \Return \textsc{Rejeitar} \Comment{Estado repetido ou regressivo (\textit{replay})}
+      \EndIf
+      \If{$S < T$}
+        \Return \textsc{Rejeitar} \Comment{Saldo insuficiente}
+      \EndIf
+      \State $S' \gets S - T$;\quad $C' \gets C + 1$
+      \If{\textbf{não} $\Call{EscreverCartao}{S', C', K}$}
+        \Return \textsc{Rejeitar} \Comment{Falha na gravação do cartão}
+      \EndIf
+      \State $H[U] \gets C$ \Comment{Consome o contador observado}
+      \State Registrar $(M, U, S, C, -T, t)$ em $L$
+      \Return \textsc{Autorizar}
+    \EndFunction
+
+    \Function{LerCartao}{$K$}
+      \State Autenticar comunicação com o cartão utilizando $K$
+      \State Ler identificador $U$ e bloco protegido $D$
+      \If{falha de comunicação ou autenticação}
+        \Return $(\textbf{falso}, \bot, 0, 0)$
+      \EndIf
+      \State $(\mathit{ok}, S, C) \gets \mathrm{Descriptografar}(D, K)$ \Comment{Decifra e valida integridade}
+      \Return $(\mathit{ok}, U, S, C)$
+    \EndFunction
+
+    \Function{EscreverCartao}{$S, C, K$}
+      \State $D \gets \mathrm{Criptografar}(S, C, K)$ \Comment{Cifra e protege integridade de $(S, C)$}
+      \State Autenticar comunicação e gravar $D$ no cartão utilizando $K$
+      \Return \textbf{verdadeiro} se gravação bem-sucedida; \textbf{falso} caso contrário
+    \EndFunction
+  \end{algorithmic}
+\end{algorithm}

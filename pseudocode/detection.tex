@@ -1,0 +1,68 @@
+\floatname{algorithm}{Algoritmo}
+
+\begin{algorithm}[htbp]
+  \small
+  \algrenewcommand\algorithmicrequire{\textbf{Entrada:}}
+  \algrenewcommand\algorithmicensure{\textbf{Saída:}}
+  \algrenewcommand\algorithmicif{\textbf{se}}
+  \algrenewcommand\algorithmicthen{\textbf{então}}
+  \algrenewcommand\algorithmicelse{\textbf{senão}}
+  \algrenewcommand\algorithmicfor{\textbf{para}}
+  \algrenewcommand\algorithmicforall{\textbf{para cada}}
+  \algrenewcommand\algorithmicdo{\textbf{faça}}
+  \algrenewcommand\algorithmicwhile{\textbf{enquanto}}
+  \algrenewcommand\algorithmicprocedure{\textbf{procedimento}}
+  \algrenewcommand\algorithmicfunction{\textbf{função}}
+  \algrenewcommand\algorithmicreturn{\textbf{retorne}}
+  \algtext*{EndWhile}
+  \algtext*{EndFor}
+  \algtext*{EndIf}
+  \algtext*{EndProcedure}
+  \algtext*{EndFunction}
+
+  \caption{Reconciliação centralizada de registros e detecção de divergências entre sessões.}
+  \label{alg:detection}
+  \begin{algorithmic}[1]
+    \Require $\mathcal{L}$ (conjunto de registros de transações coletados dos validadores da frota).
+    \Ensure Sinalização de cartões com indícios de clonagem ou inconsistência de estado.
+    \Statex \textbf{Símbolos:} $e = (M, U, S, C, O, t)$: evento (validador, UID, saldo, contador, operação, instante);\; $E = (S, C)$: estado do cartão;\; $E' = (S + O, C + 1)$: sucessor esperado;\; $G$: eventos agrupados por $U$;\; $V$: estados vistos;\; $\Delta$: transições observadas ($E \mapsto E'$).
+    \Statex
+
+    \Procedure{ReconciliarFrota}{$\mathcal{L}$}
+      \State $G \gets \emptyset$ \Comment{Agrega e agrupa logs por cartão}
+      \ForAll{registro $L \in \mathcal{L}$}
+        \ForAll{evento $e \in L$}
+          \State Anexar $e$ em $G[e.U]$
+        \EndFor
+      \EndFor
+
+      \ForAll{$(U, R) \in G$}
+        \State Ordenar $R$ em ordem crescente do instante $t$
+        \State $V \gets \emptyset$;\quad $\Delta \gets \emptyset$
+
+        \ForAll{$e \in R$} \Comment{Verifica repetições e ramificações de estado}
+          \State $E \gets (e.S,\ e.C)$;\quad $E' \gets (e.S + e.O,\ e.C + 1)$
+          \If{$E \in V$}
+            \State Sinalizar(``replay'', $U$, $E$, $e.M$)
+          \EndIf
+          \State $V \gets V \cup \{E\}$
+          \If{$E \in \Delta$ \textbf{e} $\Delta[E] \neq E'$}
+            \State Sinalizar(``bifurcação'', $U$, $E$, $\Delta[E]$, $E'$)
+          \Else
+            \State $\Delta[E] \gets E'$
+          \EndIf
+        \EndFor
+
+        \ForAll{par consecutivo $(a, b) \in R$} \Comment{Verifica consistência temporal e entre validadores}
+          \State $E_a \gets (a.S,\ a.C)$;\quad $E'_a \gets (a.S + a.O,\ a.C + 1)$;\quad $E_b \gets (b.S,\ b.C)$
+          \If{$E_a = E_b$ \textbf{e} $a.M \neq b.M$}
+            \State Sinalizar(``clonagem entre validadores'', $U$, $a.M$, $b.M$)
+          \EndIf
+          \If{$E'_a \neq E_b$}
+            \State Sinalizar(``quebra na cadeia'', $U$, $E'_a$, $E_b$)
+          \EndIf
+        \EndFor
+      \EndFor
+    \EndProcedure
+  \end{algorithmic}
+\end{algorithm}
