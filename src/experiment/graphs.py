@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 
-def plot_results(results, out_path="experiment_plot.png"):
+def plot_results(results, out_path="experiment_plot.svg"):
     """Plot average time (ms) and average memory (MB) per configuration.
 
     `results` is a list of dicts with keys: `config`, `avg_time_ms`, `avg_mem_mb`.
@@ -16,20 +16,18 @@ def plot_results(results, out_path="experiment_plot.png"):
 
     x = range(len(configs))
     ax1.bar(x, times, color="#1f77b4", alpha=0.7)
-    ax1.set_ylabel("Average Time (ms)", color="#1f77b4")
+    ax1.set_xlabel("Configuração experimental")
+    ax1.set_ylabel("Tempo médio (ms)", color="#1f77b4")
     ax1.set_xticks(x)
     ax1.set_xticklabels(configs)
 
     ax2 = ax1.twinx()
     ax2.plot(x, mems, color="#ff7f0e", marker="o")
-    ax2.set_ylabel("Avg Memory (MB)", color="#ff7f0e")
+    ax2.set_ylabel("Uso médio de memória (MB)", color="#ff7f0e")
 
-    plt.title("Experiment: Average Transaction Time and Memory by Configuration")
+    plt.title("Tempo médio de transação e uso de memória por configuração")
     plt.tight_layout()
-    plt.savefig(out_path)
-    try:
-        plt.show()
-    except Exception:
-        pass
+    plt.savefig(out_path, format="svg")
+    plt.close(fig)
 
     print("Plot saved to", out_path)

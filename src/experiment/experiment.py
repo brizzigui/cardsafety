@@ -11,6 +11,12 @@ try:
 except ImportError:
     psutil = None
 
+EXP_DIR = os.path.dirname(os.path.abspath(__file__))
+CORE_DIR = os.path.abspath(os.path.join(EXP_DIR, "..", "core"))
+for _p in (EXP_DIR, CORE_DIR):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
 from validator import Validator, FARE
 import graphs
 
@@ -169,7 +175,7 @@ def run_experiment(out_dir="./experiment_results"):
         json.dump(results, f, indent=2)
 
     try:
-        graphs.plot_results(results, out_path=os.path.join(out_dir, "experiment_plot.png"))
+        graphs.plot_results(results, out_path=os.path.join(out_dir, "experiment_plot.svg"))
     except Exception as e:
         print("\nFailed to plot results:", e)
 
